@@ -13,6 +13,3 @@ out/
 ### Data Files ##
 data/raw/*
 !data/raw/.gitkeep
-
-### Jupyter Notebooks ###
-*.ipynb

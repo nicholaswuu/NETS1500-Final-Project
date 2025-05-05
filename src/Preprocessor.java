@@ -32,7 +32,6 @@ public class Preprocessor {
             
         } catch (IOException e) {
             System.err.println("Error processing files: " + e.getMessage());
-            e.printStackTrace();
         }
     }
     
@@ -167,7 +166,7 @@ public class Preprocessor {
                         processedMovies.add(movie);
                     }
                 } catch (Exception e) {
-                    // Skip this movie if there's an issue with the data
+                    // Skip this movie
                     System.err.println("Error processing movie: " + tconst + " - " + e.getMessage());
                 }
             }
@@ -180,10 +179,11 @@ public class Preprocessor {
 
     public void saveProcessedMoviesToCsv(String outputFilePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-            // CSV Header
+            // Header
             writer.write("primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,plotDescription");
             writer.newLine();
 
+            // Write a new row for each movie
             for (Movie movie : processedMovies) {
                 String row = getCSVString(movie);
                 writer.write(row);
@@ -192,7 +192,7 @@ public class Preprocessor {
 
             System.out.println("Processed movies saved to CSV at: " + outputFilePath);
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("Error saving to CSV:" + e.getMessage());
         }
     }
 
@@ -202,7 +202,7 @@ public class Preprocessor {
         String originalTitle = movie.getOriginalTitle().replace("\"", "\"\"");
         String genres = movie.getGenres().replace("\"", "\"\"");
 
-        String row = String.format("\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
+        return String.format("\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
                 title,
                 originalTitle,
                 movie.isAdult(),
@@ -212,7 +212,6 @@ public class Preprocessor {
                 movie.getAverageRating(),
                 plot
         );
-        return row;
     }
 
     public static void main(String[] args) {
