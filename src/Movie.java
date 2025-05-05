@@ -17,6 +17,7 @@ public class Movie {
     private int runtimeMinutes;
     private String genres;
     private double averageRating;
+    private String plotDescription;
     
     public Movie(String primaryTitle, String originalTitle, boolean isAdult, 
                  int startYear, int runtimeMinutes, String genres, double averageRating) {
@@ -27,6 +28,7 @@ public class Movie {
         this.runtimeMinutes = runtimeMinutes;
         this.genres = genres;
         this.averageRating = averageRating;
+        this.plotDescription = extractWikipediaPlot();
     }
     
     // Getters
@@ -37,12 +39,12 @@ public class Movie {
     public int getRuntimeMinutes() { return runtimeMinutes; }
     public String getGenres() { return genres; }
     public double getAverageRating() { return averageRating; }
+    public String getPlotDescription() { return plotDescription; }
     
     /**
      * Extracts the plot section of the movie from Wikipedia.
-     * Attempts multiple URL patterns to handle Wikipedia's different naming conventions for movie pages.
      * 
-     * @return The plot text if found, or a message indicating the plot was not found
+     * @return The plot text if found, or null if not found
      */
     public String extractWikipediaPlot() {
         List<String> possibleUrls = generatePossibleWikipediaUrls();
@@ -53,8 +55,8 @@ public class Movie {
                 return plot;
             }
         }
-        
-        return "Plot not found. Could not retrieve plot from Wikipedia for " + primaryTitle;
+        System.out.println("No plot description found: " + primaryTitle);
+        return null;
     }
     
     /**
@@ -66,31 +68,25 @@ public class Movie {
         List<String> urls = new ArrayList<>();
         
         try {
-            // Generate base URL from primary title
+            // Generate base URL using primary title
             String baseTitle = primaryTitle.replace(' ', '_');
-            baseTitle = URLEncoder.encode(baseTitle, StandardCharsets.UTF_8.toString())
-                    .replace("+", "_")
-                    .replace("%28", "(")
-                    .replace("%29", ")")
-                    .replace("%27", "'");
-            
+            baseTitle = URLEncoder.encode(baseTitle, StandardCharsets.UTF_8)
+                    .replace("'", "%27");
+
             // Try different variations of the URL
-            urls.add("https://en.wikipedia.org/wiki/" + baseTitle);
-            urls.add("https://en.wikipedia.org/wiki/" + baseTitle + "_(film)");
             urls.add("https://en.wikipedia.org/wiki/" + baseTitle + "_(" + startYear + "_film)");
-            
-            // Try with original title if different
+            urls.add("https://en.wikipedia.org/wiki/" + baseTitle + "_(film)");
+            urls.add("https://en.wikipedia.org/wiki/" + baseTitle);
+
+            // Try with original title
             if (!originalTitle.equals(primaryTitle)) {
                 String originalTitleEncoded = originalTitle.replace(' ', '_');
-                originalTitleEncoded = URLEncoder.encode(originalTitleEncoded, StandardCharsets.UTF_8.toString())
-                        .replace("+", "_")
-                        .replace("%28", "(")
-                        .replace("%29", ")")
-                        .replace("%27", "'");
-                
-                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded);
-                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded + "_(film)");
+                originalTitleEncoded = URLEncoder.encode(originalTitleEncoded, StandardCharsets.UTF_8)
+                        .replace("'", "%27");
+
                 urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded + "_(" + startYear + "_film)");
+                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded + "_(film)");
+                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded);
             }
         } catch (Exception e) {
             System.err.println("Error encoding Wikipedia URL: " + e.getMessage());
@@ -100,67 +96,36 @@ public class Movie {
     }
     
     /**
-     * Attempts to extract the plot section from a given Wikipedia URL.
+     * Extracts the plot section from a Wikipedia URL.
      * 
      * @param url The Wikipedia URL to try
      * @return The plot text if found, or null if not found
      */
     private String tryExtractPlotFromUrl(String url) {
         try {
-            // Connect to the Wikipedia page
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-                    .timeout(10000)
-                    .get();
+            Document doc = Jsoup.connect(url).get();
+            Elements plotHeaders = doc.select("h2[id^=Plot], h2[id=Synopsis]");
             
-            // First, look for sections with "Plot" heading
-            Elements plotHeadings = doc.select("h2:has(span#Plot), h2:has(span#Synopsis), h2:has(span#Story), h2:has(span#Storyline)");
-            
-            if (!plotHeadings.isEmpty()) {
-                Element plotHeading = plotHeadings.first();
+            if (!plotHeaders.isEmpty()) {
+                Element plotHeader = plotHeaders.first();
+                Element plotDiv = plotHeader.parent();
                 StringBuilder plotText = new StringBuilder();
                 
-                // Get all paragraphs until the next heading
-                Element current = plotHeading.nextElementSibling();
-                while (current != null && !current.tagName().matches("h[1-6]")) {
+                // Get all paragraphs until next heading
+                Element current = plotDiv.nextElementSibling();
+                while (current != null && !current.hasClass("mw-heading2")) {
                     if (current.tagName().equals("p")) {
                         plotText.append(current.text()).append("\n\n");
                     }
                     current = current.nextElementSibling();
                 }
                 
-                if (plotText.length() > 0) {
+                if (!plotText.isEmpty()) {
                     return plotText.toString().trim();
                 }
             }
-            
-            // If no specific plot section, try to find the first few paragraphs in the main content
-            // This is a fallback for movies where the plot might not have its own section
-            Elements contentParas = doc.select(".mw-parser-output > p");
-            if (!contentParas.isEmpty()) {
-                StringBuilder mainContent = new StringBuilder();
-                
-                // Take up to the first 3 substantial paragraphs
-                int count = 0;
-                for (Element para : contentParas) {
-                    String paraText = para.text().trim();
-                    if (paraText.length() > 100) {  // Only consider substantial paragraphs
-                        mainContent.append(paraText).append("\n\n");
-                        count++;
-                        if (count >= 3) break;
-                    }
-                }
-                
-                if (mainContent.length() > 0) {
-                    return "Plot (extracted from main content):\n" + mainContent.toString().trim();
-                }
-            }
-            
         } catch (IOException e) {
-            // URL didn't work, will try the next one
-            return null;
-        } catch (Exception e) {
-            System.err.println("Error extracting plot from " + url + ": " + e.getMessage());
+            // URL didn't work, try the next one
             return null;
         }
         
@@ -177,6 +142,7 @@ public class Movie {
                ", runtimeMinutes=" + runtimeMinutes +
                ", genres='" + genres + '\'' +
                ", averageRating=" + averageRating +
+                "\n description=" + plotDescription +
                '}';
     }
 }

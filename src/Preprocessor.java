@@ -1,5 +1,7 @@
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,7 +22,7 @@ public class Preprocessor {
             Map<String, String[]> moviesBasics = readAndFilterBasics(basicsFilePath);
             System.out.println("Filtered basics data: " + moviesBasics.size() + " movies");
             
-            // Step 2: Read and filter ratings data (only those with > 10000 votes)
+            // Step 2: Read and filter ratings data (only those with > 20000 votes)
             Map<String, String[]> highVoteRatings = readAndFilterRatings(ratingsFilePath);
             System.out.println("Filtered ratings data: " + highVoteRatings.size() + " entries");
             
@@ -102,7 +104,7 @@ public class Preprocessor {
                 
                 try {
                     int numVotes = Integer.parseInt(parts[numVotesIndex]);
-                    if (numVotes > 10000) {
+                    if (numVotes > 20000) {
                         String tconst = parts[tconstIndex];
                         String[] ratingData = new String[2];
                         ratingData[0] = parts[averageRatingIndex];    // averageRating
@@ -161,7 +163,9 @@ public class Preprocessor {
                         averageRating
                     );
 
-                    processedMovies.add(movie);
+                    if (movie.getPlotDescription() != null) {
+                        processedMovies.add(movie);
+                    }
                 } catch (Exception e) {
                     // Skip this movie if there's an issue with the data
                     System.err.println("Error processing movie: " + tconst + " - " + e.getMessage());
@@ -173,19 +177,57 @@ public class Preprocessor {
     public List<Movie> getProcessedMovies() {
         return processedMovies;
     }
-    
+
+    public void saveProcessedMoviesToCsv(String outputFilePath) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
+            // CSV Header
+            writer.write("primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,plotDescription");
+            writer.newLine();
+
+            for (Movie movie : processedMovies) {
+                String row = getCSVString(movie);
+                writer.write(row);
+                writer.newLine();
+            }
+
+            System.out.println("Processed movies saved to CSV at: " + outputFilePath);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String getCSVString(Movie movie) {
+        String plot = movie.getPlotDescription().replace("\"", "\"\"");
+        String title = movie.getPrimaryTitle().replace("\"", "\"\"");
+        String originalTitle = movie.getOriginalTitle().replace("\"", "\"\"");
+        String genres = movie.getGenres().replace("\"", "\"\"");
+
+        String row = String.format("\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
+                title,
+                originalTitle,
+                movie.isAdult(),
+                movie.getStartYear(),
+                movie.getRuntimeMinutes(),
+                genres,
+                movie.getAverageRating(),
+                plot
+        );
+        return row;
+    }
+
     public static void main(String[] args) {
         Preprocessor preprocessor = new Preprocessor();
         preprocessor.processData(
-            "./data/title.basics.tsv", 
-            "./data/title.ratings.tsv"
+            "./data/raw/title.basics.tsv",
+            "./data/raw/title.ratings.tsv"
         );
-        
-        // Print first 5 movies as a sample
+
+        // Save processed movies to CSV
+        preprocessor.saveProcessedMoviesToCsv("./data/processed/processedMovies.csv");
+
+        // Print first movie as a sample
         List<Movie> movies = preprocessor.getProcessedMovies();
         System.out.println("\nSample of processed movie:");
         System.out.println(movies.get(0));
-
-        System.out.println(movies.get(0).extractWikipediaPlot());
     }
 }

@@ -11,8 +11,8 @@ out/
 *.log
 
 ### Data Files ##
-data/*
-!data/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
 
 ### Jupyter Notebooks ###
 *.ipynb
