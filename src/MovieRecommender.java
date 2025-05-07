@@ -271,7 +271,7 @@ public class MovieRecommender {
 
             // Progress reporting
             processed++;
-            if (processed % 10 == 0 || processed == totalMovies) {
+            if (processed % 100 == 0 || processed == totalMovies) {
                 System.out.printf("Processed %d/%d movies (%.1f%%)\n",
                         processed, totalMovies, (100.0 * processed / totalMovies));
             }
@@ -314,36 +314,48 @@ public class MovieRecommender {
     public boolean saveSimilarityMap(String filePath, double threshold) {
         System.out.println("Saving similarity map to " + filePath);
 
-        // If similarity map hasn't been built yet, build it
-        if (similarityMap.isEmpty()) {
-            similarityMap = buildSimilarityMap(threshold);
-        }
-
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filePath))) {
-            // We can't directly serialize the similarity map because Movie objects might not be serializable
-            // Instead, save a serializable representation using movie IDs
+            // Save incrementally to avoid having the entire map in memory at once
+            // First, write the total size so we know how many entries to expect when reading
+            oos.writeInt(movies.size());
+            
+            int totalMovies = movies.size();
+            int processed = 0;
 
-            // Format: HashMap<String, List<String, Double>>
-            // Where the String is the movie ID (tconst)
-            HashMap<String, List<Map.Entry<String, Double>>> serializableMap = new HashMap<>();
-
-            // Convert Movie objects to their tconst IDs for serialization
-            for (Map.Entry<Movie, List<Map.Entry<Movie, Double>>> entry : similarityMap.entrySet()) {
-                String movieId = entry.getKey().getTconst();
+            // Process each movie separately to avoid out-of-memory errors
+            for (Movie movie : movies) {
+                String movieId = movie.getTconst();
                 List<Map.Entry<String, Double>> similarMoviesList = new ArrayList<>();
 
-                for (Map.Entry<Movie, Double> similarMovie : entry.getValue()) {
-                    String similarMovieId = similarMovie.getKey().getTconst();
-                    double similarity = similarMovie.getValue();
-
-                    similarMoviesList.add(new AbstractMap.SimpleEntry<>(similarMovieId, similarity));
+                // Find similar movies for this specific movie
+                for (Movie other : movies) {
+                    if (!other.equals(movie)) {
+                        double similarity = combinedSimilarity(movie, other);
+                        if (similarity >= threshold) {
+                            similarMoviesList.add(new AbstractMap.SimpleEntry<>(other.getTconst(), similarity));
+                        }
+                    }
                 }
 
-                serializableMap.put(movieId, similarMoviesList);
+                // Sort by similarity in descending order
+                similarMoviesList.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
+                
+                // Write this movie's entry to the file
+                oos.writeObject(movieId);
+                oos.writeObject(similarMoviesList);
+                
+                // Encourage garbage collection after each movie is processed
+                similarMoviesList = null;
+                System.gc();
+                
+                // Progress reporting
+                processed++;
+                if (processed % 10 == 0 || processed == totalMovies) {
+                    System.out.printf("Saved %d/%d movies (%.1f%%)\n",
+                            processed, totalMovies, (100.0 * processed / totalMovies));
+                }
             }
-
-            // Write the serializable map to file
-            oos.writeObject(serializableMap);
+            
             System.out.println("Successfully saved similarity map");
             return true;
         } catch (IOException e) {
@@ -361,41 +373,71 @@ public class MovieRecommender {
         System.out.println("Loading similarity map from " + filePath);
 
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filePath))) {
-            // Read the serialized map
-            @SuppressWarnings("unchecked")
-            HashMap<String, List<Map.Entry<String, Double>>> serializableMap =
-                    (HashMap<String, List<Map.Entry<String, Double>>>) ois.readObject();
-
-            // Convert the ID-based map back to Movie objects
+            // Clear any existing map
             similarityMap = new HashMap<>();
-
-            for (Map.Entry<String, List<Map.Entry<String, Double>>> entry : serializableMap.entrySet()) {
-                String movieId = entry.getKey();
-                Movie movie = movieIdMap.get(movieId);
-
-                if (movie == null) {
-                    System.err.println("Warning: Movie ID " + movieId + " not found in current dataset");
-                    continue;
-                }
-
-                List<Map.Entry<Movie, Double>> similarMoviesList = new ArrayList<>();
-
-                for (Map.Entry<String, Double> similarMovieEntry : entry.getValue()) {
-                    String similarMovieId = similarMovieEntry.getKey();
-                    double similarity = similarMovieEntry.getValue();
-
-                    Movie similarMovie = movieIdMap.get(similarMovieId);
-                    if (similarMovie != null) {
-                        similarMoviesList.add(new AbstractMap.SimpleEntry<>(similarMovie, similarity));
+            
+            // Read the total number of entries
+            int totalMovies = ois.readInt();
+            int loaded = 0;
+            int batchSize = 100; // Load movies in batches
+            
+            // Read each movie's data incrementally
+            for (int i = 0; i < totalMovies; i++) {
+                try {
+                    // Read movie ID
+                    String movieId = (String) ois.readObject();
+                    
+                    // Read similar movies list as a separate step to reduce memory pressure
+                    @SuppressWarnings("unchecked")
+                    List<Map.Entry<String, Double>> similarMoviesIds = 
+                        (List<Map.Entry<String, Double>>) ois.readObject();
+                    
+                    // Get the movie object by ID
+                    Movie movie = movieIdMap.get(movieId);
+                    if (movie == null) {
+                        System.err.println("Warning: Movie ID " + movieId + " not found in current dataset");
+                        continue;
                     }
+                    
+                    // Convert IDs to Movie objects - do this in a limited batch to control memory usage
+                    List<Map.Entry<Movie, Double>> similarMoviesList = new ArrayList<>();
+                    int count = 0;
+                    int maxSimilarMovies = 100; // Limit number of similar movies per movie
+                    
+                    for (Map.Entry<String, Double> entry : similarMoviesIds) {
+                        // Only take top matches to save memory
+                        if (count++ >= maxSimilarMovies) break;
+                        
+                        String similarMovieId = entry.getKey();
+                        double similarity = entry.getValue();
+                        
+                        Movie similarMovie = movieIdMap.get(similarMovieId);
+                        if (similarMovie != null) {
+                            similarMoviesList.add(new AbstractMap.SimpleEntry<>(similarMovie, similarity));
+                        }
+                    }
+                    
+                    // Store in the similarity map
+                    similarityMap.put(movie, similarMoviesList);
+                    
+                    // Clear references to help with garbage collection
+                    similarMoviesIds = null;
+                    
+                    // Report progress in batches
+                    loaded++;
+                    if (loaded % batchSize == 0 || loaded == totalMovies) {
+                        System.gc(); // Request garbage collection periodically
+                        System.out.printf("Loaded %d/%d movie similarities (%.1f%%)\n", 
+                            loaded, totalMovies, (100.0 * loaded / totalMovies));
+                    }
+                } catch (ClassNotFoundException e) {
+                    System.err.println("Error loading movie data: " + e.getMessage());
                 }
-
-                similarityMap.put(movie, similarMoviesList);
             }
 
             System.out.println("Successfully loaded similarity map with " + similarityMap.size() + " movies");
             return true;
-        } catch (IOException | ClassNotFoundException e) {
+        } catch (IOException e) {
             System.err.println("Error loading similarity map: " + e.getMessage());
             return false;
         }
@@ -414,5 +456,80 @@ public class MovieRecommender {
 
         // Otherwise build and return it
         return buildSimilarityMap(threshold);
+    }
+
+    /**
+     * Finds movies that are similar to a text prompt provided by the user
+     * This method calculates similarity directly without adding the prompt to the corpus
+     * 
+     * @param prompt the text prompt to compare with movie synopses
+     * @param n number of similar movies to return
+     * @return a list of movies similar to the prompt with their similarity scores
+     */
+    public List<Map.Entry<Movie, Double>> findMoviesSimilarToPrompt(String prompt, int n) {
+        // Create a temporary movie object to represent the prompt
+        Movie promptMovie = new Movie(
+                "prompt",
+                "User Prompt",
+                "User Prompt",
+                false,
+                0,
+                0,
+                "",
+                0.0,
+                prompt
+        );
+        
+        Map<Movie, Double> similarityScores = new HashMap<>();
+        
+        // Calculate TF values for the prompt terms
+        Map<String, Double> promptTermFrequencies = new HashMap<>();
+        double promptMagnitude = 0.0;
+        
+        // Process the prompt terms
+        for (String term : promptMovie.getTermList()) {
+            double tf = promptMovie.getTermFrequency(term);
+            double idf = corpus.getInverseDocumentFrequency(term);
+            double weight = tf * idf;
+            
+            if (weight > 0) {
+                promptTermFrequencies.put(term, weight);
+                promptMagnitude += weight * weight;
+            }
+        }
+        promptMagnitude = Math.sqrt(promptMagnitude);
+        
+        // Calculate similarity with each movie
+        for (Movie movie : movies) {
+            // Calculate dot product between prompt and movie
+            double dotProduct = 0.0;
+            HashMap<String, Double> movieWeights = vectorSpace.getTfIdfWeights().get(movie);
+            
+            for (Map.Entry<String, Double> entry : promptTermFrequencies.entrySet()) {
+                String term = entry.getKey();
+                Double promptWeight = entry.getValue();
+                
+                // Check if the movie has this term
+                Double movieWeight = movieWeights.get(term);
+                if (movieWeight != null) {
+                    dotProduct += promptWeight * movieWeight;
+                }
+            }
+            
+            // Calculate cosine similarity
+            double movieMagnitude = vectorSpace.getMagnitude(movie);
+            double similarity = (promptMagnitude > 0 && movieMagnitude > 0) ? 
+                                dotProduct / (promptMagnitude * movieMagnitude) : 0.0;
+            
+            // We only use content similarity since the prompt has no genres
+            similarityScores.put(movie, similarity);
+        }
+        
+        // Sort by similarity in descending order
+        List<Map.Entry<Movie, Double>> sortedMovies = new ArrayList<>(similarityScores.entrySet());
+        sortedMovies.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
+        
+        // Return the top N movies
+        return sortedMovies.subList(0, Math.min(n, sortedMovies.size()));
     }
 }
