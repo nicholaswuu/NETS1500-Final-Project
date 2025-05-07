@@ -96,7 +96,7 @@ public class Preprocessor {
                 String[] parts = line.split("\t");
                 try {
                     int numVotes = Integer.parseInt(parts[numVotesIndex]);
-                    if (numVotes > 250000) {
+                    if (numVotes > 1000000) {
                         String tconst = parts[tconstIndex];
                         String[] ratingData = new String[2];
                         ratingData[0] = parts[averageRatingIndex];
@@ -110,36 +110,45 @@ public class Preprocessor {
     }
 
     private void mergeData(Map<String, String[]> moviesBasics, Map<String, String[]> ratings) {
+        int totalRatings = ratings.size();
+        int processedCount = 0;
+
         for (Map.Entry<String, String[]> entry : ratings.entrySet()) {
             String tconst = entry.getKey();
             if (!moviesBasics.containsKey(tconst)) continue;
 
             String[] movieData = moviesBasics.get(tconst);
             try {
-                String primaryTitle = movieData[0];
-                String originalTitle = movieData[1];
-                boolean isAdult = "1".equals(movieData[2]);
-                int startYear = "\\N".equals(movieData[3]) ? -1 : Integer.parseInt(movieData[3]);
-                int runtime = "\\N".equals(movieData[4]) ? -1 : Integer.parseInt(movieData[4]);
-                String genres = "\\N".equals(movieData[5]) ? "Unknown" : movieData[5];
-                double avgRating = Double.parseDouble(entry.getValue()[0]);
+            String primaryTitle = movieData[0];
+            String originalTitle = movieData[1];
+            boolean isAdult = "1".equals(movieData[2]);
+            int startYear = "\\N".equals(movieData[3]) ? -1 : Integer.parseInt(movieData[3]);
+            int runtime = "\\N".equals(movieData[4]) ? -1 : Integer.parseInt(movieData[4]);
+            String genres = "\\N".equals(movieData[5]) ? "Unknown" : movieData[5];
+            double avgRating = Double.parseDouble(entry.getValue()[0]);
 
-                Movie movie = new Movie(
-                        tconst,
-                        primaryTitle,
-                        originalTitle,
-                        isAdult,
-                        startYear,
-                        runtime,
-                        genres,
-                        avgRating
-                );
+            Movie movie = new Movie(
+                tconst,
+                primaryTitle,
+                originalTitle,
+                isAdult,
+                startYear,
+                runtime,
+                genres,
+                avgRating
+            );
 
-                if (movie.getSynopsisString() != null) {
-                    processedMovies.add(movie);
-                }
+            if (movie.getSynopsisString() != null) {
+                processedMovies.add(movie);
+            }
+
+            processedCount++;
+            if (processedCount % 10 == 0) {
+                double percentProcessed = (processedCount / (double) totalRatings) * 100;
+                System.out.printf("Processed %d/%d movies (%.2f%%)%n", processedCount, totalRatings, percentProcessed);
+            }
             } catch (Exception e) {
-                System.err.println("Error processing " + tconst + ": " + e.getMessage());
+            System.err.println("Error processing " + tconst + ": " + e.getMessage());
             }
         }
     }
@@ -150,6 +159,7 @@ public class Preprocessor {
 
     public void saveProcessedMoviesToCsv(String outputFilePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
+            System.out.println("Saving processed movies to CSV...");
             writer.write("tconst,primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,synopsis");
             writer.newLine();
             for (Movie m : processedMovies) {
@@ -194,7 +204,7 @@ public class Preprocessor {
         );
 
         // Save processed movies to CSV
-        preprocessor.saveProcessedMoviesToCsv("./data/processed/processedMovies.csv");
+        preprocessor.saveProcessedMoviesToCsv("./data/processed/testProcessedMovies.csv");
 
         // Print first movie as a sample
         List<Movie> movies = preprocessor.getProcessedMovies();

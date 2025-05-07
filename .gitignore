@@ -13,3 +13,4 @@ out/
 ### Data Files ##
 data/raw/*
 !data/raw/.gitkeep
+data/processed/testProcessedMovies.csv

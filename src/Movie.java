@@ -161,32 +161,24 @@ public class Movie implements Comparable<Movie>{
         String url = "https://www.imdb.com/title/" + tconst + "/plotsummary/";
         try {
             Document doc = Jsoup.connect(url).get();
-
-            // select each synopsis block under the metadata list items
-            Elements blocks = doc.select(
-                    "li.ipc-metadata-list__item[data-testid=list-item] div.ipc-html-content-inner-div"
-            );
+            
+            Elements blocks = doc.select("div[data-testid='sub-section-synopsis']");
             if (blocks.isEmpty()) {
                 return null;
             }
 
             StringBuilder fullPlot = new StringBuilder();
-            // track paragraphs we've already added to avoid duplicates
             Set<String> seen = new HashSet<>();
 
-            for (Element block : blocks) {
-                // convert <br> runs to paragraph breaks
-                String html = block.html();
-                String withPars = html.replaceAll("(?i)(<br\\s*/?>\\s*)+", "\n\n");
+            
+            Element block = blocks.first();
+            String text = block.text();
+            String[] paras = text.split("\\n\\n");
 
-                // strip any remaining tags
-                String[] paras = Jsoup.parse(withPars).text().trim().split("\\n\\n");
-
-                for (String para : paras) {
-                    String trimmed = para.trim();
-                    if (!trimmed.isEmpty() && seen.add(trimmed)) {
-                        fullPlot.append(trimmed).append("\n\n");
-                    }
+            for (String para : paras) {
+                String trimmed = para.trim();
+                if (!trimmed.isEmpty() && seen.add(trimmed)) {
+                    fullPlot.append(trimmed).append("\n\n");
                 }
             }
 

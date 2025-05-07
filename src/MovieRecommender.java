@@ -50,7 +50,7 @@ public class MovieRecommender {
      */
     private void loadMoviesFromCsv(String csvFilePath) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(csvFilePath))) {
-            String header = reader.readLine(); // Skip header
+            reader.readLine(); // Skip header
 
             String line;
             while ((line = reader.readLine()) != null) {
@@ -99,29 +99,27 @@ public class MovieRecommender {
 
         // Parse fields into a Movie object
         try {
-            if (fields.size() >= 9) {
-                String tconst = fields.get(0);
-                String primaryTitle = fields.get(1);
-                String originalTitle = fields.get(2);
-                boolean isAdult = Boolean.parseBoolean(fields.get(3));
-                int startYear = Integer.parseInt(fields.get(4));
-                int runtimeMinutes = Integer.parseInt(fields.get(5));
-                String genres = fields.get(6);
-                double averageRating = Double.parseDouble(fields.get(7));
-                String synopsis = fields.get(8);
+            String tconst = fields.get(0);
+            String primaryTitle = fields.get(1);
+            String originalTitle = fields.get(2);
+            boolean isAdult = Boolean.parseBoolean(fields.get(3));
+            int startYear = Integer.parseInt(fields.get(4));
+            int runtimeMinutes = Integer.parseInt(fields.get(5));
+            String genres = fields.get(6);
+            double averageRating = Double.parseDouble(fields.get(7));
+            String synopsis = fields.get(8);
 
-                return new Movie(
-                        tconst,
-                        primaryTitle,
-                        originalTitle,
-                        isAdult,
-                        startYear,
-                        runtimeMinutes,
-                        genres,
-                        averageRating,
-                        synopsis
-                );
-            }
+            return new Movie(
+                    tconst,
+                    primaryTitle,
+                    originalTitle,
+                    isAdult,
+                    startYear,
+                    runtimeMinutes,
+                    genres,
+                    averageRating,
+                    synopsis
+            );
         } catch (NumberFormatException e) {
             System.err.println("Error parsing movie line: " + e.getMessage());
         }
@@ -284,7 +282,7 @@ public class MovieRecommender {
      */
     public static void main(String[] args) {
         // Path to the saved CSV file
-        String csvPath = "./data/processed/processedMovies.csv";
+        String csvPath = "./data/processed/testProcessedMovies.csv";
 
         // Create recommender
         MovieRecommender recommender = new MovieRecommender(csvPath);
