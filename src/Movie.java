@@ -6,12 +6,9 @@ import org.jsoup.select.Elements;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
-public class Movie {
+public class Movie implements Comparable<Movie>{
     private String tconst;
     private String primaryTitle;
     private String originalTitle;
@@ -20,10 +17,11 @@ public class Movie {
     private int runtimeMinutes;
     private String genres;
     private double averageRating;
-    private String plotDescription;
+    private String synopsisStr;
+    private HashMap<String, Integer> termFrequency;
 
     /**
-     * Create a Movie object and immediately fetch its plot from IMDb.
+     * Create a Movie object and fetch its plot from IMDb.
      *
      * @param tconst IMDb title ID, e.g. "tt2649356"
      * @param primaryTitle The main title
@@ -50,10 +48,45 @@ public class Movie {
         this.runtimeMinutes = runtimeMinutes;
         this.genres = genres;
         this.averageRating = averageRating;
-        this.plotDescription = extractImdbPlot(tconst);
+        this.synopsisStr = extractImdbSynopsis();
     }
 
-    // Getters
+    /**
+     * Create a Movie object given the synopsis.
+     *
+     * @param tconst IMDb title ID, e.g. "tt2649356"
+     * @param primaryTitle The main title
+     * @param originalTitle The original title (if different)
+     * @param isAdult True if adult content
+     * @param startYear Release year
+     * @param runtimeMinutes Duration in minutes
+     * @param genres Comma-separated genres
+     * @param averageRating IMDb average rating
+     * @param synopsisStr Movie synopsis
+     */
+    public Movie(String tconst,
+                 String primaryTitle,
+                 String originalTitle,
+                 boolean isAdult,
+                 int startYear,
+                 int runtimeMinutes,
+                 String genres,
+                 double averageRating,
+                 String synopsisStr) {
+        this.tconst = tconst;
+        this.primaryTitle = primaryTitle;
+        this.originalTitle = originalTitle;
+        this.isAdult = isAdult;
+        this.startYear = startYear;
+        this.runtimeMinutes = runtimeMinutes;
+        this.genres = genres;
+        this.averageRating = averageRating;
+        this.synopsisStr = synopsisStr;
+    }
+
+    /**
+     * Getters
+     */
     public String getTconst() { return tconst; }
     public String getPrimaryTitle() { return primaryTitle; }
     public String getOriginalTitle() { return originalTitle; }
@@ -62,25 +95,72 @@ public class Movie {
     public int getRuntimeMinutes() { return runtimeMinutes; }
     public String getGenres() { return genres; }
     public double getAverageRating() { return averageRating; }
-    public String getPlotDescription() { return plotDescription; }
+    public String getSynopsisString() { return synopsisStr; }
 
 
+    public Set<String> getTermList() {
+        if (termFrequency == null && getSynopsisString() != null) {
+            termFrequency = processRawSynopsis(synopsisStr);
+        }
+        return termFrequency.keySet();
+    }
 
+    /**
+     * This method will return the term frequency for a given word.
+     * If this document doesn't contain the word, it will return 0
+     * @param word The word to look for
+     * @return the term frequency for this word in this document
+     */
+    public double getTermFrequency(String word) {
+        if (termFrequency == null) {
+            termFrequency = processRawSynopsis(synopsisStr);
+        }
+        return termFrequency.getOrDefault(word, 0);
+    }
+
+    /**
+     * Processes a raw synopsis to extract term frequencies.
+     * Splits text into words, removes non-alphanumeric characters, converts to lowercase,
+     * and counts the frequency of each term.
+     *
+     * @param rawText The raw synopsis to process (can be null)
+     * @return HashMap containing each term and its frequency
+     */
+    public HashMap<String, Integer> processRawSynopsis(String rawText) {
+        HashMap<String, Integer> termFrequency = new HashMap<>();
+
+        // Return empty map if text is null or empty
+        if (rawText == null || rawText.isEmpty()) {
+            return termFrequency;
+        }
+
+        // Split text into words
+        String[] words = rawText.split("\\s+");
+
+        // Process each word
+        for (String word : words) {
+            // Remove non-alphanumeric characters and convert to lowercase
+            String term = word.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
+
+            // Add non-empty terms to frequency map
+            if (!term.isEmpty()) {
+                // Use merge for a more concise way to update frequencies
+                termFrequency.merge(term, 1, Integer::sum);
+            }
+        }
+        return termFrequency;
+    }
 
     /**
      * Scrapes the full user-submitted plot synopsis from IMDb's /plotsummary page,
      * removing duplicate paragraphs.
      *
-     * @param tconst IMDb title ID
      * @return The combined unique synopsis paragraphs, or null if none found.
      */
-    private String extractImdbPlot(String tconst) {
+    private String extractImdbSynopsis() {
         String url = "https://www.imdb.com/title/" + tconst + "/plotsummary/";
         try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                    .timeout(10_000)
-                    .get();
+            Document doc = Jsoup.connect(url).get();
 
             // select each synopsis block under the metadata list items
             Elements blocks = doc.select(
@@ -98,6 +178,7 @@ public class Movie {
                 // convert <br> runs to paragraph breaks
                 String html = block.html();
                 String withPars = html.replaceAll("(?i)(<br\\s*/?>\\s*)+", "\n\n");
+
                 // strip any remaining tags
                 String[] paras = Jsoup.parse(withPars).text().trim().split("\\n\\n");
 
@@ -110,108 +191,18 @@ public class Movie {
             }
 
             String result = fullPlot.toString().trim();
-            return result.isEmpty() ? null : result;
+
+            if (result.isEmpty()) {
+                System.out.println("No synopsis found for " + primaryTitle);
+                return null;
+            }
+
+            return result;
 
         } catch (Exception e) {
             System.err.println("Failed to fetch IMDb plot for " + tconst + ": " + e.getMessage());
             return null;
         }
-    }
-
-
-
-
-
-
-    /**
-     * Extracts the plot section of the movie from Wikipedia.
-     *
-     * @return The plot text if found, or null if not found
-     */
-    public String extractWikipediaPlot() {
-        List<String> possibleUrls = generatePossibleWikipediaUrls();
-
-        for (String url : possibleUrls) {
-            String plot = tryExtractPlotFromUrl(url);
-            if (plot != null && !plot.isEmpty()) {
-                return plot;
-            }
-        }
-        System.out.println("No plot description found: " + primaryTitle);
-        return null;
-    }
-
-    /**
-     * Generates a list of possible Wikipedia URLs for the movie.
-     *
-     * @return List of URLs to try
-     */
-    private List<String> generatePossibleWikipediaUrls() {
-        List<String> urls = new ArrayList<>();
-
-        try {
-            // Generate base URL using primary title
-            String baseTitle = primaryTitle.replace(' ', '_');
-            baseTitle = URLEncoder.encode(baseTitle, StandardCharsets.UTF_8)
-                    .replace("'", "%27");
-
-            // Try different variations of the URL
-            urls.add("https://en.wikipedia.org/wiki/" + baseTitle + "_(" + startYear + "_film)");
-            urls.add("https://en.wikipedia.org/wiki/" + baseTitle + "_(film)");
-            urls.add("https://en.wikipedia.org/wiki/" + baseTitle);
-
-            // Try with original title
-            if (!originalTitle.equals(primaryTitle)) {
-                String originalTitleEncoded = originalTitle.replace(' ', '_');
-                originalTitleEncoded = URLEncoder.encode(originalTitleEncoded, StandardCharsets.UTF_8)
-                        .replace("'", "%27");
-
-                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded + "_(" + startYear + "_film)");
-                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded + "_(film)");
-                urls.add("https://en.wikipedia.org/wiki/" + originalTitleEncoded);
-            }
-        } catch (Exception e) {
-            System.err.println("Error encoding Wikipedia URL: " + e.getMessage());
-        }
-
-        return urls;
-    }
-
-    /**
-     * Extracts the plot section from a Wikipedia URL.
-     *
-     * @param url The Wikipedia URL to try
-     * @return The plot text if found, or null if not found
-     */
-    private String tryExtractPlotFromUrl(String url) {
-        try {
-            Document doc = Jsoup.connect(url).get();
-            Elements plotHeaders = doc.select("h2[id^=Plot], h2[id=Synopsis]");
-
-            if (!plotHeaders.isEmpty()) {
-                Element plotHeader = plotHeaders.first();
-                Element plotDiv = plotHeader.parent();
-                StringBuilder plotText = new StringBuilder();
-
-                // Get all paragraphs until next heading
-                Element current = plotDiv.nextElementSibling();
-                while (current != null && !current.hasClass("mw-heading2")) {
-                    if (current.tagName().equals("p")) {
-                        plotText.append(current.text()).append("\n\n");
-                    }
-                    current = current.nextElementSibling();
-                }
-
-                if (!plotText.isEmpty()) {
-                    return plotText.toString().trim();
-                }
-            }
-        } catch (IOException e) {
-            // URL didn't work, try the next one
-            return null;
-        }
-
-        return null;
     }
 
     @Override
@@ -224,7 +215,12 @@ public class Movie {
                ", runtimeMinutes=" + runtimeMinutes +
                ", genres='" + genres + '\'' +
                ", averageRating=" + averageRating +
-                "\n description=" + plotDescription +
+                "\n synopsis=" + synopsisStr +
                '}';
+    }
+
+    @Override
+    public int compareTo(Movie other) {
+        return primaryTitle.compareTo(other.getPrimaryTitle());
     }
 }

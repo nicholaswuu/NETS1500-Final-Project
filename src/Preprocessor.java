@@ -96,7 +96,7 @@ public class Preprocessor {
                 String[] parts = line.split("\t");
                 try {
                     int numVotes = Integer.parseInt(parts[numVotesIndex]);
-                    if (numVotes > 500000) {
+                    if (numVotes > 250000) {
                         String tconst = parts[tconstIndex];
                         String[] ratingData = new String[2];
                         ratingData[0] = parts[averageRatingIndex];
@@ -114,17 +114,16 @@ public class Preprocessor {
             String tconst = entry.getKey();
             if (!moviesBasics.containsKey(tconst)) continue;
 
-            String[] bd = moviesBasics.get(tconst);
+            String[] movieData = moviesBasics.get(tconst);
             try {
-                String primaryTitle = bd[0];
-                String originalTitle = bd[1];
-                boolean isAdult = "1".equals(bd[2]);
-                int startYear = "\\N".equals(bd[3]) ? -1 : Integer.parseInt(bd[3]);
-                int runtime = "\\N".equals(bd[4]) ? -1 : Integer.parseInt(bd[4]);
-                String genres = "\\N".equals(bd[5]) ? "Unknown" : bd[5];
+                String primaryTitle = movieData[0];
+                String originalTitle = movieData[1];
+                boolean isAdult = "1".equals(movieData[2]);
+                int startYear = "\\N".equals(movieData[3]) ? -1 : Integer.parseInt(movieData[3]);
+                int runtime = "\\N".equals(movieData[4]) ? -1 : Integer.parseInt(movieData[4]);
+                String genres = "\\N".equals(movieData[5]) ? "Unknown" : movieData[5];
                 double avgRating = Double.parseDouble(entry.getValue()[0]);
 
-                // Use the new Movie constructor that takes tconst
                 Movie movie = new Movie(
                         tconst,
                         primaryTitle,
@@ -136,7 +135,7 @@ public class Preprocessor {
                         avgRating
                 );
 
-                if (movie.getPlotDescription() != null) {
+                if (movie.getSynopsisString() != null) {
                     processedMovies.add(movie);
                 }
             } catch (Exception e) {
@@ -144,31 +143,18 @@ public class Preprocessor {
             }
         }
     }
-    
+
     public List<Movie> getProcessedMovies() {
         return processedMovies;
     }
 
     public void saveProcessedMoviesToCsv(String outputFilePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-            writer.write("tconst,primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,plotDescription");
+            writer.write("tconst,primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,synopsis");
             writer.newLine();
             for (Movie m : processedMovies) {
-                String singleLinePlot = m.getPlotDescription()
-                        .replace("\"", "\"\"")
-                        .replaceAll("\\r?\\n+", " ");
-                writer.write(String.format(
-                        "\"%s\",\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
-                        m.getTconst(),
-                        m.getPrimaryTitle().replace("\"","\"\""),
-                        m.getOriginalTitle().replace("\"","\"\""),
-                        m.isAdult(),
-                        m.getStartYear(),
-                        m.getRuntimeMinutes(),
-                        m.getGenres().replace("\"","\"\""),
-                        m.getAverageRating(),
-                        singleLinePlot
-                ));
+                String CSVString = getCSVString(m);
+                writer.write(CSVString);
                 writer.newLine();
             }
             System.out.println("CSV saved to: " + outputFilePath);
@@ -177,21 +163,26 @@ public class Preprocessor {
         }
     }
 
-    private String getCSVString(Movie movie) {
-        String plot = movie.getPlotDescription().replace("\"", "\"\"");
-        String title = movie.getPrimaryTitle().replace("\"", "\"\"");
-        String originalTitle = movie.getOriginalTitle().replace("\"", "\"\"");
-        String genres = movie.getGenres().replace("\"", "\"\"");
+    private String getCSVString(Movie m) {
+        String tconst = m.getTconst();
+        String title = m.getPrimaryTitle().replace("\"", "\"\"");
+        String originalTitle = m.getOriginalTitle().replace("\"", "\"\"");
+        String genres = m.getGenres().replace("\"", "\"\"");
 
-        return String.format("\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
+        String singleLineSynopsis = m.getSynopsisString()
+                .replace("\"", "\"\"")
+                .replaceAll("\\r?\\n+", " ");
+
+        return String.format("\"%s\",\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
+                tconst,
                 title,
                 originalTitle,
-                movie.isAdult(),
-                movie.getStartYear(),
-                movie.getRuntimeMinutes(),
+                m.isAdult(),
+                m.getStartYear(),
+                m.getRuntimeMinutes(),
                 genres,
-                movie.getAverageRating(),
-                plot
+                m.getAverageRating(),
+                singleLineSynopsis
         );
     }
 
