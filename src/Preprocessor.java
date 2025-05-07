@@ -34,19 +34,16 @@ public class Preprocessor {
             System.err.println("Error processing files: " + e.getMessage());
         }
     }
-    
+
     private Map<String, String[]> readAndFilterBasics(String filePath) throws IOException {
         Map<String, String[]> moviesMap = new HashMap<>();
-        
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String headerLine = reader.readLine(); // Skip header
             String[] headers = headerLine.split("\t");
-            
-            // Find column indices
-            int tconstIndex = -1, titleTypeIndex = -1, primaryTitleIndex = -1, 
-                originalTitleIndex = -1, isAdultIndex = -1, startYearIndex = -1,
-                runtimeMinutesIndex = -1, genresIndex = -1;
-            
+            int tconstIndex = -1, titleTypeIndex = -1, primaryTitleIndex = -1,
+                    originalTitleIndex = -1, isAdultIndex = -1, startYearIndex = -1,
+                    runtimeMinutesIndex = -1, genresIndex = -1;
+
             for (int i = 0; i < headers.length; i++) {
                 switch (headers[i]) {
                     case "tconst": tconstIndex = i; break;
@@ -59,36 +56,33 @@ public class Preprocessor {
                     case "genres": genresIndex = i; break;
                 }
             }
-            
+
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split("\t");
-                if (parts.length > titleTypeIndex && parts[titleTypeIndex].equals("movie")) {
+                if (parts.length > titleTypeIndex && "movie".equals(parts[titleTypeIndex])) {
                     String tconst = parts[tconstIndex];
-                    String[] movieData = new String[7];
-                    movieData[0] = parts[primaryTitleIndex];             // primaryTitle
-                    movieData[1] = parts[originalTitleIndex];            // originalTitle
-                    movieData[2] = parts[isAdultIndex];                  // isAdult
-                    movieData[3] = parts[startYearIndex];                // startYear
-                    movieData[4] = parts[runtimeMinutesIndex];           // runtimeMinutes
-                    movieData[5] = parts[genresIndex];                   // genres
+                    String[] movieData = new String[6];
+                    movieData[0] = parts[primaryTitleIndex];
+                    movieData[1] = parts[originalTitleIndex];
+                    movieData[2] = parts[isAdultIndex];
+                    movieData[3] = parts[startYearIndex];
+                    movieData[4] = parts[runtimeMinutesIndex];
+                    movieData[5] = parts[genresIndex];
                     moviesMap.put(tconst, movieData);
                 }
             }
         }
         return moviesMap;
     }
-    
+
     private Map<String, String[]> readAndFilterRatings(String filePath) throws IOException {
         Map<String, String[]> ratingsMap = new HashMap<>();
-        
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String headerLine = reader.readLine(); // Skip header
             String[] headers = headerLine.split("\t");
-            
-            // Find column indices
             int tconstIndex = -1, averageRatingIndex = -1, numVotesIndex = -1;
-            
+
             for (int i = 0; i < headers.length; i++) {
                 switch (headers[i]) {
                     case "tconst": tconstIndex = i; break;
@@ -96,79 +90,57 @@ public class Preprocessor {
                     case "numVotes": numVotesIndex = i; break;
                 }
             }
-            
+
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split("\t");
-                
                 try {
                     int numVotes = Integer.parseInt(parts[numVotesIndex]);
-                    if (numVotes > 20000) {
+                    if (numVotes > 500000) {
                         String tconst = parts[tconstIndex];
                         String[] ratingData = new String[2];
-                        ratingData[0] = parts[averageRatingIndex];    // averageRating
-                        ratingData[1] = parts[numVotesIndex];         // numVotes
+                        ratingData[0] = parts[averageRatingIndex];
+                        ratingData[1] = parts[numVotesIndex];
                         ratingsMap.put(tconst, ratingData);
                     }
-                } catch (NumberFormatException e) {
-                    // Skip this line if numVotes is not a valid integer
-                }
+                } catch (NumberFormatException ignored) {}
             }
         }
         return ratingsMap;
     }
-    
+
     private void mergeData(Map<String, String[]> moviesBasics, Map<String, String[]> ratings) {
-        // Iterate through each entry in the ratings map
         for (Map.Entry<String, String[]> entry : ratings.entrySet()) {
             String tconst = entry.getKey();
-            String[] ratingData = entry.getValue();
-            
-            // Check if this tconst exists in moviesBasics
-            if (moviesBasics.containsKey(tconst)) {
-                String[] movieData = moviesBasics.get(tconst);
-                
-                try {
-                    // Parse all the data
-                    String primaryTitle = movieData[0];
-                    String originalTitle = movieData[1];
-                    boolean isAdult = "1".equals(movieData[2]);
-                    
-                    int startYear;
-                    try {
-                        startYear = movieData[3].equals("\\N") ? -1 : Integer.parseInt(movieData[3]);
-                    } catch (NumberFormatException e) {
-                        startYear = -1;
-                    }
-                    
-                    int runtimeMinutes;
-                    try {
-                        runtimeMinutes = movieData[4].equals("\\N") ? -1 : Integer.parseInt(movieData[4]);
-                    } catch (NumberFormatException e) {
-                        runtimeMinutes = -1;
-                    }
-                    
-                    String genres = movieData[5].equals("\\N") ? "Unknown" : movieData[5];
-                    double averageRating = Double.parseDouble(ratingData[0]);
-                    
-                    // Create a Movie object and add it to the list
-                    Movie movie = new Movie(
+            if (!moviesBasics.containsKey(tconst)) continue;
+
+            String[] bd = moviesBasics.get(tconst);
+            try {
+                String primaryTitle = bd[0];
+                String originalTitle = bd[1];
+                boolean isAdult = "1".equals(bd[2]);
+                int startYear = "\\N".equals(bd[3]) ? -1 : Integer.parseInt(bd[3]);
+                int runtime = "\\N".equals(bd[4]) ? -1 : Integer.parseInt(bd[4]);
+                String genres = "\\N".equals(bd[5]) ? "Unknown" : bd[5];
+                double avgRating = Double.parseDouble(entry.getValue()[0]);
+
+                // Use the new Movie constructor that takes tconst
+                Movie movie = new Movie(
+                        tconst,
                         primaryTitle,
                         originalTitle,
                         isAdult,
                         startYear,
-                        runtimeMinutes,
+                        runtime,
                         genres,
-                        averageRating
-                    );
+                        avgRating
+                );
 
-                    if (movie.getPlotDescription() != null) {
-                        processedMovies.add(movie);
-                    }
-                } catch (Exception e) {
-                    // Skip this movie
-                    System.err.println("Error processing movie: " + tconst + " - " + e.getMessage());
+                if (movie.getPlotDescription() != null) {
+                    processedMovies.add(movie);
                 }
+            } catch (Exception e) {
+                System.err.println("Error processing " + tconst + ": " + e.getMessage());
             }
         }
     }
@@ -179,20 +151,29 @@ public class Preprocessor {
 
     public void saveProcessedMoviesToCsv(String outputFilePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-            // Header
-            writer.write("primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,plotDescription");
+            writer.write("tconst,primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,plotDescription");
             writer.newLine();
-
-            // Write a new row for each movie
-            for (Movie movie : processedMovies) {
-                String row = getCSVString(movie);
-                writer.write(row);
+            for (Movie m : processedMovies) {
+                String singleLinePlot = m.getPlotDescription()
+                        .replace("\"", "\"\"")
+                        .replaceAll("\\r?\\n+", " ");
+                writer.write(String.format(
+                        "\"%s\",\"%s\",\"%s\",%b,%d,%d,\"%s\",%.2f,\"%s\"",
+                        m.getTconst(),
+                        m.getPrimaryTitle().replace("\"","\"\""),
+                        m.getOriginalTitle().replace("\"","\"\""),
+                        m.isAdult(),
+                        m.getStartYear(),
+                        m.getRuntimeMinutes(),
+                        m.getGenres().replace("\"","\"\""),
+                        m.getAverageRating(),
+                        singleLinePlot
+                ));
                 writer.newLine();
             }
-
-            System.out.println("Processed movies saved to CSV at: " + outputFilePath);
+            System.out.println("CSV saved to: " + outputFilePath);
         } catch (IOException e) {
-            System.err.println("Error saving to CSV:" + e.getMessage());
+            System.err.println("Error saving CSV: " + e.getMessage());
         }
     }
 
