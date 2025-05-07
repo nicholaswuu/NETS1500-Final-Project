@@ -79,7 +79,7 @@ public class VectorSpaceModel {
             
             // Report progress
             processedCount++;
-            if (processedCount % batchSize == 0 || processedCount == totalMovies) {
+            if (processedCount % (batchSize * 10) == 0 || processedCount == totalMovies) {
                 System.out.printf("Processed %d/%d movies (%.1f%%)%n", 
                                    processedCount, totalMovies, 
                                    (100.0 * processedCount / totalMovies));

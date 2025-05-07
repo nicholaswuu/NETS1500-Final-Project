@@ -34,20 +34,6 @@ public class MovieRecommendationSystem {
         // Initialize the recommender
         MovieRecommender recommender = new MovieRecommender(csvPath);
 
-        // Check if a similarity map already exists
-        String similarityMapPath = "./data/processed/similarity_map.dat";
-        File similarityFile = new File(similarityMapPath);
-        double threshold = 0.0;
-
-        if (similarityFile.exists()) {
-            System.out.println("Found existing similarity map. Loading...");
-            recommender.loadSimilarityMap(similarityMapPath);
-        } else {
-            System.out.println("Similarity map not found. Building and saving new similarity map...");
-            recommender.saveSimilarityMap(similarityMapPath, threshold);
-            System.out.println("Similarity map saved to " + similarityMapPath);
-        }
-
         // Get statistics about the loaded movies
         ArrayList<Movie> allMovies = recommender.getMovies();
         System.out.println("Successfully loaded " + allMovies.size() + " movies");
