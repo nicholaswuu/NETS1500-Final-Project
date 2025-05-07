@@ -1,6 +1,4 @@
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 /**
@@ -15,9 +13,15 @@ public class MovieRecommender {
     private VectorSpaceModel vectorSpace;
     private HashMap<Movie, Set<String>> genreMap;
 
+    // Similarity map to store precomputed similarities
+    private HashMap<Movie, List<Map.Entry<Movie, Double>>> similarityMap;
+
+    // Map to look up movies by their ID for faster loading
+    private HashMap<String, Movie> movieIdMap;
+
     // Weights for combining different similarity metrics
-    private final double CONTENT_WEIGHT = 0.7;
-    private final double GENRE_WEIGHT = 0.3;
+    private final double CONTENT_WEIGHT = 0.5;
+    private final double GENRE_WEIGHT = 0.5;
 
     /**
      * Constructor that loads movies from CSV and builds the necessary models
@@ -26,6 +30,8 @@ public class MovieRecommender {
     public MovieRecommender(String csvFilePath) {
         movies = new ArrayList<>();
         genreMap = new HashMap<>();
+        movieIdMap = new HashMap<>();
+        similarityMap = new HashMap<>();
 
         try {
             loadMoviesFromCsv(csvFilePath);
@@ -38,8 +44,20 @@ public class MovieRecommender {
             // Extract and map genres
             extractGenres();
 
+            // Build movie ID map for faster lookups
+            buildMovieIdMap();
+
         } catch (IOException e) {
             System.err.println("Error loading movies: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Builds a map from movie IDs to Movie objects for faster lookups
+     */
+    private void buildMovieIdMap() {
+        for (Movie movie : movies) {
+            movieIdMap.put(movie.getTconst(), movie);
         }
     }
 
@@ -50,7 +68,7 @@ public class MovieRecommender {
      */
     private void loadMoviesFromCsv(String csvFilePath) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(csvFilePath))) {
-            reader.readLine(); // Skip header
+            String header = reader.readLine(); // Skip header
 
             String line;
             while ((line = reader.readLine()) != null) {
@@ -99,27 +117,29 @@ public class MovieRecommender {
 
         // Parse fields into a Movie object
         try {
-            String tconst = fields.get(0);
-            String primaryTitle = fields.get(1);
-            String originalTitle = fields.get(2);
-            boolean isAdult = Boolean.parseBoolean(fields.get(3));
-            int startYear = Integer.parseInt(fields.get(4));
-            int runtimeMinutes = Integer.parseInt(fields.get(5));
-            String genres = fields.get(6);
-            double averageRating = Double.parseDouble(fields.get(7));
-            String synopsis = fields.get(8);
+            if (fields.size() >= 9) {
+                String tconst = fields.get(0);
+                String primaryTitle = fields.get(1);
+                String originalTitle = fields.get(2);
+                boolean isAdult = Boolean.parseBoolean(fields.get(3));
+                int startYear = Integer.parseInt(fields.get(4));
+                int runtimeMinutes = Integer.parseInt(fields.get(5));
+                String genres = fields.get(6);
+                double averageRating = Double.parseDouble(fields.get(7));
+                String synopsis = fields.get(8);
 
-            return new Movie(
-                    tconst,
-                    primaryTitle,
-                    originalTitle,
-                    isAdult,
-                    startYear,
-                    runtimeMinutes,
-                    genres,
-                    averageRating,
-                    synopsis
-            );
+                return new Movie(
+                        tconst,
+                        primaryTitle,
+                        originalTitle,
+                        isAdult,
+                        startYear,
+                        runtimeMinutes,
+                        genres,
+                        averageRating,
+                        synopsis
+                );
+            }
         } catch (NumberFormatException e) {
             System.err.println("Error parsing movie line: " + e.getMessage());
         }
@@ -188,11 +208,19 @@ public class MovieRecommender {
 
     /**
      * Finds the top N similar movies to the given movie
+     * Uses precomputed similarity map if available for better performance
      * @param movie the reference movie
      * @param n number of similar movies to return
      * @return a list of similar movies with their similarity scores
      */
     public List<Map.Entry<Movie, Double>> findSimilarMovies(Movie movie, int n) {
+        // Check if we have precomputed similarities for this movie
+        if (!similarityMap.isEmpty() && similarityMap.containsKey(movie)) {
+            List<Map.Entry<Movie, Double>> precomputed = similarityMap.get(movie);
+            return precomputed.subList(0, Math.min(n, precomputed.size()));
+        }
+
+        // If no precomputed data, calculate similarities on the fly
         Map<Movie, Double> similarityScores = new HashMap<>();
 
         for (Movie other : movies) {
@@ -278,64 +306,113 @@ public class MovieRecommender {
     }
 
     /**
-     * Main method to demonstrate functionality
+     * Saves the similarity map to a file
+     * @param filePath the path to save the similarity map
+     * @param threshold minimum similarity score to include in the saved map
+     * @return true if save was successful, false otherwise
      */
-    public static void main(String[] args) {
-        // Path to the saved CSV file
-        String csvPath = "./data/processed/testProcessedMovies.csv";
+    public boolean saveSimilarityMap(String filePath, double threshold) {
+        System.out.println("Saving similarity map to " + filePath);
 
-        // Create recommender
-        MovieRecommender recommender = new MovieRecommender(csvPath);
-
-        // Example: Find a movie by title
-        String searchTitle = "The Dark Knight";
-        Movie movie = recommender.getMovieByTitle(searchTitle);
-
-        if (movie != null) {
-            System.out.println("Found movie: " + movie.getPrimaryTitle() + " (" + movie.getStartYear() + ")");
-
-            // Find similar movies
-            List<Map.Entry<Movie, Double>> similarMovies = recommender.findSimilarMovies(movie, 5);
-
-            System.out.println("\nTop 5 similar movies to " + movie.getPrimaryTitle() + ":");
-            for (Map.Entry<Movie, Double> entry : similarMovies) {
-                Movie similar = entry.getKey();
-                double similarity = entry.getValue();
-
-                System.out.printf("- %s (%d): %.4f similarity (Genres: %s)\n",
-                        similar.getPrimaryTitle(),
-                        similar.getStartYear(),
-                        similarity,
-                        similar.getGenres());
-            }
-        } else {
-            System.out.println("Movie not found: " + searchTitle);
+        // If similarity map hasn't been built yet, build it
+        if (similarityMap.isEmpty()) {
+            similarityMap = buildSimilarityMap(threshold);
         }
 
-        // Build and display a sample of the full similarity map
-        double threshold = 0.5; // Only keep similarities above this threshold
-        HashMap<Movie, List<Map.Entry<Movie, Double>>> similarityMap =
-                recommender.buildSimilarityMap(threshold);
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filePath))) {
+            // We can't directly serialize the similarity map because Movie objects might not be serializable
+            // Instead, save a serializable representation using movie IDs
 
-        System.out.println("\nSample of similarity map (showing 3 movies):");
-        int count = 0;
-        for (Map.Entry<Movie, List<Map.Entry<Movie, Double>>> entry : similarityMap.entrySet()) {
-            if (count++ >= 3) break;
+            // Format: HashMap<String, List<String, Double>>
+            // Where the String is the movie ID (tconst)
+            HashMap<String, List<Map.Entry<String, Double>>> serializableMap = new HashMap<>();
 
-            Movie movie1 = entry.getKey();
-            List<Map.Entry<Movie, Double>> similars = entry.getValue();
+            // Convert Movie objects to their tconst IDs for serialization
+            for (Map.Entry<Movie, List<Map.Entry<Movie, Double>>> entry : similarityMap.entrySet()) {
+                String movieId = entry.getKey().getTconst();
+                List<Map.Entry<String, Double>> similarMoviesList = new ArrayList<>();
 
-            System.out.println("\n" + movie1.getPrimaryTitle() + " (" + movie1.getStartYear() +
-                    ") has " + similars.size() + " similar movies above threshold " + threshold);
+                for (Map.Entry<Movie, Double> similarMovie : entry.getValue()) {
+                    String similarMovieId = similarMovie.getKey().getTconst();
+                    double similarity = similarMovie.getValue();
 
-            // Show top 3 similar movies
-            for (int i = 0; i < Math.min(3, similars.size()); i++) {
-                Map.Entry<Movie, Double> similar = similars.get(i);
-                System.out.printf("  - %s (%d): %.4f similarity\n",
-                        similar.getKey().getPrimaryTitle(),
-                        similar.getKey().getStartYear(),
-                        similar.getValue());
+                    similarMoviesList.add(new AbstractMap.SimpleEntry<>(similarMovieId, similarity));
+                }
+
+                serializableMap.put(movieId, similarMoviesList);
             }
+
+            // Write the serializable map to file
+            oos.writeObject(serializableMap);
+            System.out.println("Successfully saved similarity map");
+            return true;
+        } catch (IOException e) {
+            System.err.println("Error saving similarity map: " + e.getMessage());
+            return false;
         }
+    }
+
+    /**
+     * Loads a previously saved similarity map from a file
+     * @param filePath the path to load the similarity map from
+     * @return true if load was successful, false otherwise
+     */
+    public boolean loadSimilarityMap(String filePath) {
+        System.out.println("Loading similarity map from " + filePath);
+
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filePath))) {
+            // Read the serialized map
+            @SuppressWarnings("unchecked")
+            HashMap<String, List<Map.Entry<String, Double>>> serializableMap =
+                    (HashMap<String, List<Map.Entry<String, Double>>>) ois.readObject();
+
+            // Convert the ID-based map back to Movie objects
+            similarityMap = new HashMap<>();
+
+            for (Map.Entry<String, List<Map.Entry<String, Double>>> entry : serializableMap.entrySet()) {
+                String movieId = entry.getKey();
+                Movie movie = movieIdMap.get(movieId);
+
+                if (movie == null) {
+                    System.err.println("Warning: Movie ID " + movieId + " not found in current dataset");
+                    continue;
+                }
+
+                List<Map.Entry<Movie, Double>> similarMoviesList = new ArrayList<>();
+
+                for (Map.Entry<String, Double> similarMovieEntry : entry.getValue()) {
+                    String similarMovieId = similarMovieEntry.getKey();
+                    double similarity = similarMovieEntry.getValue();
+
+                    Movie similarMovie = movieIdMap.get(similarMovieId);
+                    if (similarMovie != null) {
+                        similarMoviesList.add(new AbstractMap.SimpleEntry<>(similarMovie, similarity));
+                    }
+                }
+
+                similarityMap.put(movie, similarMoviesList);
+            }
+
+            System.out.println("Successfully loaded similarity map with " + similarityMap.size() + " movies");
+            return true;
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error loading similarity map: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Gets the precomputed similarity map
+     * @param threshold minimum similarity threshold (if map needs to be built)
+     * @return the similarity map
+     */
+    public HashMap<Movie, List<Map.Entry<Movie, Double>>> getSimilarityMap(double threshold) {
+        // If the map is already loaded, return it
+        if (!similarityMap.isEmpty()) {
+            return similarityMap;
+        }
+
+        // Otherwise build and return it
+        return buildSimilarityMap(threshold);
     }
 }

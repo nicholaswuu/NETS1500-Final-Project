@@ -96,7 +96,7 @@ public class Preprocessor {
                 String[] parts = line.split("\t");
                 try {
                     int numVotes = Integer.parseInt(parts[numVotesIndex]);
-                    if (numVotes > 1000000) {
+                    if (numVotes > 20000) {
                         String tconst = parts[tconstIndex];
                         String[] ratingData = new String[2];
                         ratingData[0] = parts[averageRatingIndex];
