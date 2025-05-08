@@ -43,8 +43,9 @@ public class MovieRecommendationSystem {
         
         while (running) {
             System.out.println("\n=== Movie Recommendation Options ===");
-            System.out.println("1. Search for a movie by title");
-            System.out.println("2. Search for movies similar to a text prompt");
+            System.out.println("1. Search for recommendations based on a single movie");
+            System.out.println("2. Search for recommendations based on multiple movies");
+            System.out.println("3. Search for movies similar to a text prompt");
             System.out.println("Enter '" + KILL_KEY + "' to quit");
             System.out.print("\nChoose an option: ");
             
@@ -61,6 +62,9 @@ public class MovieRecommendationSystem {
                     searchMovieByTitle(scanner, recommender, allMovies);
                     break;
                 case "2":
+                    searchMoviesByMultipleMovies(scanner, recommender, allMovies);
+                    break;
+                case "3":
                     searchMoviesByPrompt(scanner, recommender);
                     break;
                 default:
@@ -124,6 +128,82 @@ public class MovieRecommendationSystem {
     }
     
     /**
+     * Handles the search for recommendations based on multiple movies
+     * 
+     * @param scanner Scanner for user input
+     * @param recommender The movie recommender instance
+     * @param allMovies List of all available movies
+     */
+    private static void searchMoviesByMultipleMovies(Scanner scanner, MovieRecommender recommender, ArrayList<Movie> allMovies) {
+        List<Movie> inputMovies = new ArrayList<>();
+        boolean addingMovies = true;
+        
+        System.out.println("\nEnter movie titles one by one. Type 'done' when finished or '" + KILL_KEY + "' to cancel.");
+        
+        while (addingMovies) {
+            if (inputMovies.isEmpty()) {
+                System.out.print("Enter movie #1: ");
+            } else {
+                System.out.print("Enter movie #" + (inputMovies.size() + 1) + " (or 'done' to finish): ");
+            }
+            
+            String input = scanner.nextLine().trim();
+            
+            if (input.equalsIgnoreCase("done")) {
+                if (inputMovies.isEmpty()) {
+                    System.out.println("You must enter at least one movie. Please try again.");
+                    continue;
+                }
+                addingMovies = false;
+            } else if (input.equalsIgnoreCase(KILL_KEY)) {
+                System.out.println("Operation canceled.");
+                return;
+            } else {
+                Movie movie = recommender.getMovieByTitle(input);
+                if (movie == null) {
+                    System.out.println("Movie not found. Here are some available movies:");
+                    // Show a sample of available movies
+                    for (int i = 0; i < Math.min(5, allMovies.size()); i++) {
+                        System.out.println("- " + allMovies.get(i).getPrimaryTitle() +
+                                " (" + allMovies.get(i).getStartYear() + ")");
+                    }
+                    System.out.println("Please try another title.");
+                } else {
+                    // Check if movie is already in the list
+                    boolean alreadyAdded = false;
+                    for (Movie addedMovie : inputMovies) {
+                        if (addedMovie.getTconst().equals(movie.getTconst())) {
+                            System.out.println("This movie is already in your list. Please enter a different movie.");
+                            alreadyAdded = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!alreadyAdded) {
+                        inputMovies.add(movie);
+                        System.out.println("Added: " + movie.getPrimaryTitle() + " (" + movie.getStartYear() + ")");
+                    }
+                }
+            }
+        }
+        
+        // Display information about selected movies
+        System.out.println("\nSelected Movies:");
+        for (int i = 0; i < inputMovies.size(); i++) {
+            Movie movie = inputMovies.get(i);
+            System.out.println((i + 1) + ". " + movie.getPrimaryTitle() + 
+                " (" + movie.getStartYear() + ") - " + movie.getGenres());
+        }
+        
+        // Find similar movies based on the input list
+        System.out.println("\nFinding recommendations based on your selected movies...");
+        List<Map.Entry<Movie, Double>> similarMovies = recommender.findSimilarMoviesFromList(inputMovies, 10);
+        
+        // Display similar movies
+        displaySimilarMovies(similarMovies, "your selected movies");
+    }
+    
+    /**
      * Displays information about a movie
      * 
      * @param movie The movie to display
@@ -143,7 +223,7 @@ public class MovieRecommendationSystem {
      * @param comparisonSource The source being compared to (movie title or prompt)
      */
     private static void displaySimilarMovies(List<Map.Entry<Movie, Double>> similarMovies, String comparisonSource) {
-        System.out.println("\nTop 10 Movies Similar to \"" + comparisonSource + "\":");
+        System.out.println("\nTop 10 Movies Similar to " + comparisonSource + ":");
         System.out.println("----------------------------------------------------");
         
         if (similarMovies.isEmpty()) {

@@ -13,15 +13,12 @@ public class MovieRecommender {
     private VectorSpaceModel vectorSpace;
     private HashMap<Movie, Set<String>> genreMap;
 
-    // Similarity map to store precomputed similarities
-    private HashMap<Movie, List<Map.Entry<Movie, Double>>> similarityMap;
-
     // Map to look up movies by their ID for faster loading
     private HashMap<String, Movie> movieIdMap;
 
     // Weights for combining different similarity metrics
-    private final double CONTENT_WEIGHT = 0.5;
-    private final double GENRE_WEIGHT = 0.5;
+    private final double CONTENT_WEIGHT = 0.8;
+    private final double GENRE_WEIGHT = 0.2;
 
     /**
      * Constructor that loads movies from CSV and builds the necessary models
@@ -31,7 +28,6 @@ public class MovieRecommender {
         movies = new ArrayList<>();
         genreMap = new HashMap<>();
         movieIdMap = new HashMap<>();
-        similarityMap = new HashMap<>();
 
         try {
             loadMoviesFromCsv(csvFilePath);
@@ -168,7 +164,7 @@ public class MovieRecommender {
 
     /**
      * Calculates the genre similarity between two movies
-     * Uses Jaccard similarity (intersection over union)
+     * Uses percent of genres in movie 1 covered by movie 2
      * @param m1 first movie
      * @param m2 second movie
      * @return similarity score between 0.0 and 1.0
@@ -181,15 +177,13 @@ public class MovieRecommender {
             return 0.0;
         }
 
-        // Create a copy for the intersection operation
-        Set<String> intersection = new HashSet<>(genres1);
-        intersection.retainAll(genres2);
+        int count = 0;
 
-        // Create a copy for the union operation
-        Set<String> union = new HashSet<>(genres1);
-        union.addAll(genres2);
+        for (String genre : genres1) {
+            count += genres2.contains(genre) ? 1 : 0;
+        }
 
-        return (double) intersection.size() / union.size();
+        return (double) count / genres2.size();
     }
 
     /**
@@ -214,13 +208,7 @@ public class MovieRecommender {
      * @return a list of similar movies with their similarity scores
      */
     public List<Map.Entry<Movie, Double>> findSimilarMovies(Movie movie, int n) {
-        // Check if we have precomputed similarities for this movie
-        if (!similarityMap.isEmpty() && similarityMap.containsKey(movie)) {
-            List<Map.Entry<Movie, Double>> precomputed = similarityMap.get(movie);
-            return precomputed.subList(0, Math.min(n, precomputed.size()));
-        }
-
-        // If no precomputed data, calculate similarities on the fly
+        // Calculate similarities
         Map<Movie, Double> similarityScores = new HashMap<>();
 
         for (Movie other : movies) {
@@ -281,19 +269,28 @@ public class MovieRecommender {
     }
 
     /**
-     * Gets a movie by its title (partial match)
+     * Gets a movie by its title
      * @param title the title to search for
      * @return the first movie that matches the title, or null if none found
      */
     public Movie getMovieByTitle(String title) {
         String lowercaseTitle = title.toLowerCase();
 
+        // First check for exact match
+        for (Movie movie : movies) {
+            if (movie.getPrimaryTitle().toLowerCase().equals(lowercaseTitle)) {
+                return movie;
+            }
+        }
+
+        // Backup check for partial match
         for (Movie movie : movies) {
             if (movie.getPrimaryTitle().toLowerCase().contains(lowercaseTitle)) {
                 return movie;
             }
         }
 
+        // No movie found
         return null;
     }
 
@@ -308,6 +305,7 @@ public class MovieRecommender {
     /**
      * Finds movies that are similar to a text prompt provided by the user
      * This method calculates similarity directly without adding the prompt to the corpus
+     * Also considers genre matches in the prompt text
      * 
      * @param prompt the text prompt to compare with movie synopses
      * @param n number of similar movies to return
@@ -346,6 +344,21 @@ public class MovieRecommender {
         }
         promptMagnitude = Math.sqrt(promptMagnitude);
         
+        // Prepare prompt text for genre matching (convert to lowercase for case-insensitive matching)
+        String promptLower = prompt.toLowerCase();
+        
+        // Get all unique genres from our dataset for matching
+        Set<String> allGenres = new HashSet<>();
+        for (Movie movie : movies) {
+            String[] genreArray = movie.getGenres().split(",");
+            for (String genre : genreArray) {
+                allGenres.add(genre.trim().toLowerCase());
+            }
+        }
+        
+        // Define genre boost factor
+        final double GENRE_BOOST_PER_MATCH = 0.05;
+        
         // Calculate similarity with each movie
         for (Movie movie : movies) {
             // Calculate dot product between prompt and movie
@@ -368,12 +381,83 @@ public class MovieRecommender {
             double similarity = (promptMagnitude > 0 && movieMagnitude > 0) ? 
                                 dotProduct / (promptMagnitude * movieMagnitude) : 0.0;
             
-            // We only use content similarity since the prompt has no genres
+            // Add genre matching boost
+            double genreBoost = 0.00;
+            String[] movieGenres = movie.getGenres().split(",");
+            int matchedGenres = 0;
+            
+            for (String genre : movieGenres) {
+                String genreLower = genre.trim().toLowerCase();
+                if (promptLower.contains(genreLower)) {
+                    matchedGenres++;
+                }
+            }
+            
+            // Calculate genre boost (capped at MAX_GENRE_BOOST)
+            genreBoost = matchedGenres * GENRE_BOOST_PER_MATCH;
+            
+            // Apply genre boost to similarity score
+            similarity += genreBoost;
+            
+            // Ensure similarity doesn't exceed 1.0
+            similarity = Math.min(similarity, 1.0);
+            
+            // Store the combined similarity score
             similarityScores.put(movie, similarity);
         }
         
         // Sort by similarity in descending order
         List<Map.Entry<Movie, Double>> sortedMovies = new ArrayList<>(similarityScores.entrySet());
+        sortedMovies.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
+        
+        // Return the top N movies
+        return sortedMovies.subList(0, Math.min(n, sortedMovies.size()));
+    }
+
+    /**
+     * Finds movies that are similar to a list of input movies
+     * Calculates average similarity across all input movies
+     * 
+     * @param inputMovies list of movies to find recommendations for
+     * @param n number of similar movies to return
+     * @return a list of movies similar to the input movies with their similarity scores
+     */
+    public List<Map.Entry<Movie, Double>> findSimilarMoviesFromList(List<Movie> inputMovies, int n) {
+        // If the input list is empty, return an empty list
+        if (inputMovies == null || inputMovies.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // If only one movie in the list, use the standard method
+        if (inputMovies.size() == 1) {
+            return findSimilarMovies(inputMovies.get(0), n);
+        }
+        
+        Map<Movie, Double> aggregateSimilarityScores = new HashMap<>();
+        Set<Movie> inputMovieSet = new HashSet<>(inputMovies);
+        
+        // For each movie in our corpus
+        for (Movie candidateMovie : movies) {
+            // Skip if this movie is in the input list
+            if (inputMovieSet.contains(candidateMovie)) {
+                continue;
+            }
+            
+            double totalSimilarity = 0.0;
+            
+            // Calculate similarity between this candidate and each input movie
+            for (Movie inputMovie : inputMovies) {
+                double similarity = combinedSimilarity(inputMovie, candidateMovie);
+                totalSimilarity += similarity;
+            }
+            
+            // Use average similarity across all input movies
+            double avgSimilarity = totalSimilarity / inputMovies.size();
+            aggregateSimilarityScores.put(candidateMovie, avgSimilarity);
+        }
+        
+        // Sort by similarity in descending order
+        List<Map.Entry<Movie, Double>> sortedMovies = new ArrayList<>(aggregateSimilarityScores.entrySet());
         sortedMovies.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
         
         // Return the top N movies
