@@ -18,18 +18,18 @@ public class Preprocessor {
     
     public void processData(String basicsFilePath, String ratingsFilePath) {
         try {
-            // Read and filter basics data (only movies)
+            // load and filter basic movie info
             Map<String, String[]> moviesBasics = readAndFilterBasics(basicsFilePath);
             System.out.println("Filtered basics data: " + moviesBasics.size() + " movies");
-            
-            // Step 2: Read and filter ratings data (only those with > 20000 votes)
+
+            // load ratings with >20k votes
             Map<String, String[]> highVoteRatings = readAndFilterRatings(ratingsFilePath);
             System.out.println("Filtered ratings data: " + highVoteRatings.size() + " entries");
-            
-            // Step 3: Merge the datasets
+
+            // merge movie info and ratings
             mergeData(moviesBasics, highVoteRatings);
             System.out.println("Final merged dataset: " + processedMovies.size() + " movies");
-            
+
         } catch (IOException e) {
             System.err.println("Error processing files: " + e.getMessage());
         }
@@ -38,7 +38,8 @@ public class Preprocessor {
     private Map<String, String[]> readAndFilterBasics(String filePath) throws IOException {
         Map<String, String[]> moviesMap = new HashMap<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String headerLine = reader.readLine(); // Skip header
+            // skip header row
+            String headerLine = reader.readLine();
             String[] headers = headerLine.split("\t");
             int tconstIndex = -1, titleTypeIndex = -1, primaryTitleIndex = -1,
                     originalTitleIndex = -1, isAdultIndex = -1, startYearIndex = -1,
@@ -79,7 +80,8 @@ public class Preprocessor {
     private Map<String, String[]> readAndFilterRatings(String filePath) throws IOException {
         Map<String, String[]> ratingsMap = new HashMap<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String headerLine = reader.readLine(); // Skip header
+            // skip header row
+            String headerLine = reader.readLine();
             String[] headers = headerLine.split("\t");
             int tconstIndex = -1, averageRatingIndex = -1, numVotesIndex = -1;
 
@@ -109,6 +111,7 @@ public class Preprocessor {
         return ratingsMap;
     }
 
+    // combine movie metadata and ratings, filtering out those without synopsis
     private void mergeData(Map<String, String[]> moviesBasics, Map<String, String[]> ratings) {
         int totalRatings = ratings.size();
         int processedCount = 0;
@@ -119,47 +122,51 @@ public class Preprocessor {
 
             String[] movieData = moviesBasics.get(tconst);
             try {
-            String primaryTitle = movieData[0];
-            String originalTitle = movieData[1];
-            boolean isAdult = "1".equals(movieData[2]);
-            int startYear = "\\N".equals(movieData[3]) ? -1 : Integer.parseInt(movieData[3]);
-            int runtime = "\\N".equals(movieData[4]) ? -1 : Integer.parseInt(movieData[4]);
-            String genres = "\\N".equals(movieData[5]) ? "Unknown" : movieData[5];
-            double avgRating = Double.parseDouble(entry.getValue()[0]);
+                // unpack movie basics and ratings
+                String primaryTitle = movieData[0];
+                String originalTitle = movieData[1];
+                boolean isAdult = "1".equals(movieData[2]);
+                int startYear = "\\N".equals(movieData[3]) ? -1 : Integer.parseInt(movieData[3]);
+                int runtime = "\\N".equals(movieData[4]) ? -1 : Integer.parseInt(movieData[4]);
+                String genres = "\\N".equals(movieData[5]) ? "Unknown" : movieData[5];
+                double avgRating = Double.parseDouble(entry.getValue()[0]);
 
-            Movie movie = new Movie(
-                tconst,
-                primaryTitle,
-                originalTitle,
-                isAdult,
-                startYear,
-                runtime,
-                genres,
-                avgRating
-            );
+                Movie movie = new Movie(
+                    tconst,
+                    primaryTitle,
+                    originalTitle,
+                    isAdult,
+                    startYear,
+                    runtime,
+                    genres,
+                    avgRating
+                );
 
-            if (movie.getSynopsisString() != null) {
-                processedMovies.add(movie);
-            }
+                if (movie.getSynopsisString() != null) {
+                    // only keep movies with a plot
+                    processedMovies.add(movie);
+                }
 
-            processedCount++;
-            if (processedCount % 10 == 0) {
-                double percentProcessed = (processedCount / (double) totalRatings) * 100;
-                System.out.printf("Processed %d/%d movies (%.2f%%)%n", processedCount, totalRatings, percentProcessed);
-            }
+                processedCount++;
+                if (processedCount % 10 == 0) {
+                    double percentProcessed = (processedCount / (double) totalRatings) * 100;
+                    System.out.printf("Processed %d/%d movies (%.2f%%)%n", processedCount, totalRatings, percentProcessed);
+                }
             } catch (Exception e) {
-            System.err.println("Error processing " + tconst + ": " + e.getMessage());
+                System.err.println("Error processing " + tconst + ": " + e.getMessage());
             }
         }
     }
 
+    // return processed movies list
     public List<Movie> getProcessedMovies() {
         return processedMovies;
     }
 
+    // write processed movies to a CSV file
     public void saveProcessedMoviesToCsv(String outputFilePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-            System.out.println("Saving processed movies to CSV...");
+            // write CSV header
             writer.write("tconst,primaryTitle,originalTitle,isAdult,startYear,runtimeMinutes,genres,averageRating,synopsis");
             writer.newLine();
             for (Movie m : processedMovies) {
@@ -173,6 +180,7 @@ public class Preprocessor {
         }
     }
 
+    // build one CSV line for a movie
     private String getCSVString(Movie m) {
         String tconst = m.getTconst();
         String title = m.getPrimaryTitle().replace("\"", "\"\"");
@@ -196,6 +204,7 @@ public class Preprocessor {
         );
     }
 
+    // quick test driver for preprocessing steps
     public static void main(String[] args) {
         Preprocessor preprocessor = new Preprocessor();
         preprocessor.processData(

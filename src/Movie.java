@@ -4,6 +4,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import java.util.*;
 
+// Represents a movie with metadata and text processing utilities
 public class Movie implements Comparable<Movie>{
     private String tconst;
     private String primaryTitle;
@@ -16,18 +17,7 @@ public class Movie implements Comparable<Movie>{
     private String synopsisStr;
     private HashMap<String, Integer> termFrequency;
 
-    /**
-     * Create a Movie object and fetch its plot from IMDb.
-     *
-     * @param tconst IMDb title ID, e.g. "tt2649356"
-     * @param primaryTitle The main title
-     * @param originalTitle The original title (if different)
-     * @param isAdult True if adult content
-     * @param startYear Release year
-     * @param runtimeMinutes Duration in minutes
-     * @param genres Comma-separated genres
-     * @param averageRating IMDb average rating
-     */
+    // Create movie and load plot from IMDb
     public Movie(String tconst,
                  String primaryTitle,
                  String originalTitle,
@@ -47,19 +37,7 @@ public class Movie implements Comparable<Movie>{
         this.synopsisStr = extractImdbSynopsis();
     }
 
-    /**
-     * Create a Movie object given the synopsis.
-     *
-     * @param tconst IMDb title ID, e.g. "tt2649356"
-     * @param primaryTitle The main title
-     * @param originalTitle The original title (if different)
-     * @param isAdult True if adult content
-     * @param startYear Release year
-     * @param runtimeMinutes Duration in minutes
-     * @param genres Comma-separated genres
-     * @param averageRating IMDb average rating
-     * @param synopsisStr Movie synopsis
-     */
+    // Create movie with provided synopsis
     public Movie(String tconst,
                  String primaryTitle,
                  String originalTitle,
@@ -80,9 +58,7 @@ public class Movie implements Comparable<Movie>{
         this.synopsisStr = synopsisStr;
     }
 
-    /**
-     * Getters
-     */
+    // Simple getters
     public String getTconst() { return tconst; }
     public String getPrimaryTitle() { return primaryTitle; }
     public String getOriginalTitle() { return originalTitle; }
@@ -101,12 +77,7 @@ public class Movie implements Comparable<Movie>{
         return termFrequency.keySet();
     }
 
-    /**
-     * This method will return the term frequency for a given word.
-     * If this document doesn't contain the word, it will return 0
-     * @param word The word to look for
-     * @return the term frequency for this word in this document
-     */
+    // Return term frequency (0 if missing)
     public double getTermFrequency(String word) {
         if (termFrequency == null) {
             termFrequency = processRawSynopsis(synopsisStr);
@@ -114,14 +85,7 @@ public class Movie implements Comparable<Movie>{
         return termFrequency.getOrDefault(word, 0);
     }
 
-    /**
-     * Processes a raw synopsis to extract term frequencies.
-     * Splits text into words, removes non-alphanumeric characters, converts to lowercase,
-     * and counts the frequency of each term.
-     *
-     * @param rawText The raw synopsis to process (can be null)
-     * @return HashMap containing each term and its frequency
-     */
+    // Extract and count terms from text
     public HashMap<String, Integer> processRawSynopsis(String rawText) {
         HashMap<String, Integer> termFrequency = new HashMap<>();
 
@@ -147,17 +111,12 @@ public class Movie implements Comparable<Movie>{
         return termFrequency;
     }
 
-    /**
-     * Scrapes the full user-submitted plot synopsis from IMDb's /plotsummary page,
-     * removing duplicate paragraphs.
-     *
-     * @return The combined unique synopsis paragraphs, or null if none found.
-     */
+    // Fetch and clean plot synopsis from IMDb
     private String extractImdbSynopsis() {
         String url = "https://www.imdb.com/title/" + tconst + "/plotsummary/";
         try {
             Document doc = Jsoup.connect(url).get();
-            
+
             Elements blocks = doc.select("div[data-testid='sub-section-synopsis']");
             if (blocks.isEmpty()) {
                 return null;
@@ -166,7 +125,7 @@ public class Movie implements Comparable<Movie>{
             StringBuilder fullPlot = new StringBuilder();
             Set<String> seen = new HashSet<>();
 
-            
+
             Element block = blocks.first();
             String text = block.text();
             String[] paras = text.split("\\n\\n");
@@ -193,6 +152,7 @@ public class Movie implements Comparable<Movie>{
         }
     }
 
+    // Simple string representation
     @Override
     public String toString() {
         return "Movie{" +

@@ -2,36 +2,20 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * This class implements the Vector-Space model.
- * It takes a corpus and creates the tf-idf vectors for each movie.
- *
- */
+
+// Builds TF-IDF vectors and supports similarity queries
 public class VectorSpaceModel {
 
-    /**
-     * The corpus of movies.
-     */
+    // source of all movies and term stats
     private Corpus corpus;
 
-    /**
-     * The tf-idf weight vectors.
-     * The hashmap maps a document to another hashmap.
-     * The second hashmap maps a term to its tf-idf weight for this movie.
-     */
+    // TF-IDF weights per movie
     private HashMap<Movie, HashMap<String, Double>> tfIdfWeights;
-    
-    /**
-     * Store magnitudes to avoid recalculating
-     */
+
+    // precomputed vector lengths
     private Map<Movie, Double> magnitudes;
 
-    /**
-     * The constructor.
-     * It will take a corpus of movies.
-     * Using the corpus, it will generate tf-idf vectors for each movie.
-     * @param corpus the corpus of movies
-     */
+    // initialize model and compute vectors
     public VectorSpaceModel(Corpus corpus) {
         this.corpus = corpus;
         tfIdfWeights = new HashMap<Movie, HashMap<String, Double>>();
@@ -40,22 +24,19 @@ public class VectorSpaceModel {
         createTfIdfWeights();
     }
 
-    /**
-     * This creates the tf-idf vectors.
-     * Optimized for memory efficiency by processing in batches
-     */
+    // compute TF-IDF for each movie in batches
     private void createTfIdfWeights() {
-        System.out.println("Creating the tf-idf weight vectors");
-        int batchSize = 100; // Process movies in batches
+        // start building TF-IDF weights
+        int batchSize = 100; 
         int totalMovies = corpus.getMovies().size();
         int processedCount = 0;
-        
+
         // Get all terms just once
         Set<String> terms = corpus.getInvertedIndex().keySet();
-        
-        // Process movies in batches to save memory
+
+        // loop over all movies
         for (Movie movie : corpus.getMovies()) {
-            // Only store non-zero weights
+            // collect non-zero term weights
             HashMap<String, Double> weights = new HashMap<String, Double>();
             double magnitude = 0.0;
 
@@ -65,55 +46,43 @@ public class VectorSpaceModel {
                 if (tf > 0) {
                     double idf = corpus.getInverseDocumentFrequency(term);
                     double weight = tf * idf;
-                    
+
                     if (weight > 0) {
                         weights.put(term, weight);
                         magnitude += weight * weight;
                     }
                 }
             }
-            
+
             // Store the weights and pre-calculated magnitude
             tfIdfWeights.put(movie, weights);
             magnitudes.put(movie, Math.sqrt(magnitude));
-            
-            // Report progress
+
             processedCount++;
             if (processedCount % (batchSize * 10) == 0 || processedCount == totalMovies) {
-                System.out.printf("Processed %d/%d movies (%.1f%%)%n", 
-                                   processedCount, totalMovies, 
+                System.out.printf("Processed %d/%d movies (%.1f%%)%n",
+                                   processedCount, totalMovies,
                                    (100.0 * processedCount / totalMovies));
-                
+
                 // Force garbage collection to free up memory
                 System.gc();
             }
         }
-        
-        System.out.println("Finished creating tf-idf vectors");
+
+        // done building TF-IDF vectors
     }
 
-    /**
-     * This method will return the magnitude of a vector.
-     * Now uses pre-calculated magnitudes for efficiency.
-     * @param movie the movie whose magnitude is calculated.
-     * @return the magnitude
-     */
+    // get stored vector length
     public double getMagnitude(Movie movie) {
         return magnitudes.get(movie);
     }
 
-    /**
-     * This will take two movies and return the dot product.
-     * Optimized to only iterate through terms that exist in both movies.
-     * @param m1 Movie 1
-     * @param m2 Movie 2
-     * @return the dot product of the movies
-     */
+    // dot product of two TF-IDF vectors
     private double getDotProduct(Movie m1, Movie m2) {
         double product = 0;
         HashMap<String, Double> weights1 = tfIdfWeights.get(m1);
         HashMap<String, Double> weights2 = tfIdfWeights.get(m2);
-        
+
         // Choose the smaller map to iterate through for efficiency
         HashMap<String, Double> smaller = weights1.size() < weights2.size() ? weights1 : weights2;
         HashMap<String, Double> larger = smaller == weights1 ? weights2 : weights1;
@@ -122,7 +91,7 @@ public class VectorSpaceModel {
         for (Map.Entry<String, Double> entry : smaller.entrySet()) {
             String term = entry.getKey();
             Double weight2 = larger.get(term);
-            
+
             // Only add to product if term exists in both documents
             if (weight2 != null) {
                 product += entry.getValue() * weight2;
@@ -132,21 +101,12 @@ public class VectorSpaceModel {
         return product;
     }
 
-    /**
-     * This will return the cosine similarity of two movies.
-     * This will range from 0 (not similar) to 1 (very similar).
-     * @param m1 Movie 1
-     * @param m2 Movie 2
-     * @return the cosine similarity
-     */
+    // cosine similarity between two movies
     public double cosineSimilarity(Movie m1, Movie m2) {
         return getDotProduct(m1, m2) / (getMagnitude(m1) * getMagnitude(m2));
     }
 
-    /**
-     * Gets the TF-IDF weight map for all movies
-     * @return the map of TF-IDF weights
-     */
+    // raw TF-IDF map
     public HashMap<Movie, HashMap<String, Double>> getTfIdfWeights() {
         return tfIdfWeights;
     }

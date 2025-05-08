@@ -1,21 +1,19 @@
 import java.io.File;
 import java.util.*;
 
-/**
- * Main class to demonstrate the movie recommendation system
- */
+// Main CLI for movie recommendations
 public class MovieRecommendationSystem {
 
     private static final String KILL_KEY = "q";
 
     public static void main(String[] args) {
-        // Path to the processed movies CSV file
+        // CSV file path
         String csvPath = "./data/processed/processedMovies.csv";
         File csvFile = new File(csvPath);
 
         System.out.println("=== Movie Recommendation System ===");
 
-        // Check if the processed CSV file exists, if not, run the Preprocessor
+        // If CSV missing, preprocess data
         if (!csvFile.exists()) {
             System.out.println("Processed movies CSV file not found. Running preprocessor...");
             Preprocessor preprocessor = new Preprocessor();
@@ -23,8 +21,8 @@ public class MovieRecommendationSystem {
                 "./data/raw/title.basics.tsv",
                 "./data/raw/title.ratings.tsv"
             );
-            
-            // Save processed movies to CSV
+
+            // Write processed data
             preprocessor.saveProcessedMoviesToCsv(csvPath);
             System.out.println("CSV file created at: " + csvPath);
         }
@@ -34,13 +32,14 @@ public class MovieRecommendationSystem {
         // Initialize the recommender
         MovieRecommender recommender = new MovieRecommender(csvPath);
 
-        // Get statistics about the loaded movies
+        // Show movie count
         ArrayList<Movie> allMovies = recommender.getMovies();
         System.out.println("Successfully loaded " + allMovies.size() + " movies");
-        
+
+        // User input loop
         Scanner scanner = new Scanner(System.in);
         boolean running = true;
-        
+
         while (running) {
             System.out.println("\n=== Movie Recommendation Options ===");
             System.out.println("1. Search for recommendations based on a single movie");
@@ -48,15 +47,15 @@ public class MovieRecommendationSystem {
             System.out.println("3. Search for movies similar to a text prompt");
             System.out.println("Enter '" + KILL_KEY + "' to quit");
             System.out.print("\nChoose an option: ");
-            
+
             String option = scanner.nextLine().trim();
-            
+
             if (option.equalsIgnoreCase(KILL_KEY)) {
                 running = false;
                 System.out.println("Thank you for using the Movie Recommendation System!");
                 continue;
             }
-            
+
             switch (option) {
                 case "1":
                     searchMovieByTitle(scanner, recommender, allMovies);
@@ -72,17 +71,11 @@ public class MovieRecommendationSystem {
                     break;
             }
         }
-        
+
         scanner.close();
     }
-    
-    /**
-     * Handles the search for a movie by title
-     * 
-     * @param scanner Scanner for user input
-     * @param recommender The movie recommender instance
-     * @param allMovies List of all available movies
-     */
+
+    // Option 1: recommend based on one movie
     private static void searchMovieByTitle(Scanner scanner, MovieRecommender recommender, ArrayList<Movie> allMovies) {
         System.out.print("\nEnter a movie title to find recommendations: ");
         String searchTitle = scanner.nextLine();
@@ -108,47 +101,36 @@ public class MovieRecommendationSystem {
         // Display similar movies
         displaySimilarMovies(similarMovies, movie.getPrimaryTitle());
     }
-    
-    /**
-     * Handles the search for movies similar to a text prompt
-     * 
-     * @param scanner Scanner for user input
-     * @param recommender The movie recommender instance
-     */
+
+    // Option 3: recommend based on text prompt
     private static void searchMoviesByPrompt(Scanner scanner, MovieRecommender recommender) {
         System.out.println("\nEnter a text prompt describing the kind of movie you're looking for:");
         System.out.println("(Example: \"A sci-fi adventure with robots and space travel\")");
         String prompt = scanner.nextLine();
-        
+
         System.out.println("\nFinding movies similar to your prompt...");
         List<Map.Entry<Movie, Double>> similarMovies = recommender.findMoviesSimilarToPrompt(prompt, 10);
-        
+
         // Display similar movies
         displaySimilarMovies(similarMovies, "your prompt \"" + prompt + "\"");
     }
-    
-    /**
-     * Handles the search for recommendations based on multiple movies
-     * 
-     * @param scanner Scanner for user input
-     * @param recommender The movie recommender instance
-     * @param allMovies List of all available movies
-     */
+
+    // Option 2: recommend based on multiple movies
     private static void searchMoviesByMultipleMovies(Scanner scanner, MovieRecommender recommender, ArrayList<Movie> allMovies) {
         List<Movie> inputMovies = new ArrayList<>();
         boolean addingMovies = true;
-        
+
         System.out.println("\nEnter movie titles one by one. Type 'done' when finished or '" + KILL_KEY + "' to cancel.");
-        
+
         while (addingMovies) {
             if (inputMovies.isEmpty()) {
                 System.out.print("Enter movie #1: ");
             } else {
                 System.out.print("Enter movie #" + (inputMovies.size() + 1) + " (or 'done' to finish): ");
             }
-            
+
             String input = scanner.nextLine().trim();
-            
+
             if (input.equalsIgnoreCase("done")) {
                 if (inputMovies.isEmpty()) {
                     System.out.println("You must enter at least one movie. Please try again.");
@@ -178,7 +160,7 @@ public class MovieRecommendationSystem {
                             break;
                         }
                     }
-                    
+
                     if (!alreadyAdded) {
                         inputMovies.add(movie);
                         System.out.println("Added: " + movie.getPrimaryTitle() + " (" + movie.getStartYear() + ")");
@@ -186,28 +168,24 @@ public class MovieRecommendationSystem {
                 }
             }
         }
-        
+
         // Display information about selected movies
         System.out.println("\nSelected Movies:");
         for (int i = 0; i < inputMovies.size(); i++) {
             Movie movie = inputMovies.get(i);
-            System.out.println((i + 1) + ". " + movie.getPrimaryTitle() + 
+            System.out.println((i + 1) + ". " + movie.getPrimaryTitle() +
                 " (" + movie.getStartYear() + ") - " + movie.getGenres());
         }
-        
+
         // Find similar movies based on the input list
         System.out.println("\nFinding recommendations based on your selected movies...");
         List<Map.Entry<Movie, Double>> similarMovies = recommender.findSimilarMoviesFromList(inputMovies, 10);
-        
+
         // Display similar movies
         displaySimilarMovies(similarMovies, "your selected movies");
     }
-    
-    /**
-     * Displays information about a movie
-     * 
-     * @param movie The movie to display
-     */
+
+    // Print selected movie details
     private static void displayMovieInfo(Movie movie) {
         System.out.println("\nSelected Movie:");
         System.out.println("Title: " + movie.getPrimaryTitle());
@@ -215,13 +193,8 @@ public class MovieRecommendationSystem {
         System.out.println("Genres: " + movie.getGenres());
         System.out.println("Rating: " + movie.getAverageRating());
     }
-    
-    /**
-     * Displays a list of similar movies
-     * 
-     * @param similarMovies List of similar movies with similarity scores
-     * @param comparisonSource The source being compared to (movie title or prompt)
-     */
+
+    // Print recommendation list
     private static void displaySimilarMovies(List<Map.Entry<Movie, Double>> similarMovies, String comparisonSource) {
         System.out.println("\nTop 10 Movies Similar to " + comparisonSource + ":");
         System.out.println("----------------------------------------------------");

@@ -3,29 +3,16 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.TreeSet;
 
-/**
- * This class represents a corpus of movies.
- * It will create an inverted index for these movies.
- *
- */
+// Manages a collection of Movie objects and builds an inverted index of terms.
 public class Corpus {
 
-    /**
-     * An arraylist of all movies in the corpus.
-     */
+    // List of all movies
     private ArrayList<Movie> movies;
 
-    /**
-     * The inverted index.
-     * It will map a term to a set of movies that contain that term.
-     */
+    // Maps term -> set of movies containing that term
     private HashMap<String, Set<Movie>> invertedIndex;
 
-    /**
-     * The constructor - it takes in an arraylist of movies.
-     * It will generate the inverted index based on the movie synopses.
-     * @param movies the list of movies
-     */
+    // Initialize with a list of movies and build the inverted index
     public Corpus(ArrayList<Movie> movies) {
         this.movies = movies;
         invertedIndex = new HashMap<String, Set<Movie>>();
@@ -33,11 +20,9 @@ public class Corpus {
         createInvertedIndex();
     }
 
-    /**
-     * This method will create an inverted index.
-     */
+    // Build the inverted index from movie term lists
     private void createInvertedIndex() {
-        System.out.println("Creating the inverted index");
+        // Debug: starting index build
 
         for (Movie movie : movies) {
             Set<String> terms = movie.getTermList();
@@ -55,11 +40,8 @@ public class Corpus {
         }
     }
 
-    /**
-     * This method returns the idf for a given term.
-     * @param term a term in a document
-     * @return the idf for the term
-     */
+
+    // Return IDF of a term, or 0 if term not in index
     public double getInverseDocumentFrequency(String term) {
         if (invertedIndex.containsKey(term)) {
             double size = movies.size();
@@ -72,16 +54,12 @@ public class Corpus {
         }
     }
 
-    /**
-     * @return the movies
-     */
+    // Get the list of movies
     public ArrayList<Movie> getMovies() {
         return movies;
     }
 
-    /**
-     * @return the invertedIndex
-     */
+    // Get the term-to-movies map
     public HashMap<String, Set<Movie>> getInvertedIndex() {
         return invertedIndex;
     }
